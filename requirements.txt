@@ -1,0 +1,11 @@
+future==1.0.0
+pip==25.1.1
+cryptography==48.0.0
+pillow==12.2.0
+flet==0.28.3
+requests==2.34.2
+reportlab==4.5.1
+httpx==0.28.1
+openpyxl==3.1.5
+supabase==2.30.0
+python-dotenv==1.2.2
