@@ -15,6 +15,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from datetime import datetime, date, timedelta
 from styles import config_tf_style, drop_style, datatable_style, stat_style
+import tempfile
+from pathlib import Path
 
 
 class Reports(ft.Container):
@@ -889,7 +891,11 @@ class Reports(ft.Container):
             nom_fichier = f"Z_Report_{date_str}.pdf"
 
             # Chemin d'enregistrement par défaut (Dossier Téléchargements)
-            chemin_sauvegarde = os.path.join(os.path.expanduser("~"), "Downloads", nom_fichier)
+            # Chemin temporaire compatible Windows + Railway/Linux
+            chemin_sauvegarde = os.path.join(
+                tempfile.gettempdir(),
+                nom_fichier
+            )
 
             # Marges et structure de la page
             doc = SimpleDocTemplate(

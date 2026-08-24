@@ -13,6 +13,7 @@ from services.supabase_client import supabase_client, supabase_admin
 DEFAULT_IMAGE = "https://hojfmjmrhtsvgfzynelr.supabase.co/storage/v1/object/public/images/no%20image.jpeg"
 
 
+
 class Products(ft.Container):
     def __init__(self, cp: object):
         super().__init__(expand=True)
