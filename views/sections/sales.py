@@ -615,7 +615,8 @@ class Sales(ft.Container):
             print(f"Erreur fatale lors de la validation : {err}")
             self.cp.show_alert(f"Erreur de validation : {err}", ft.Icons.ERROR_OUTLINE, ft.Colors.RED)
 
-    def charger_police_inter(self):
+    @staticmethod
+    def charger_police_inter():
         """Charge la police Inter depuis les fichiers TTF locaux."""
         nom_police = "Inter"
         nom_police_bold = "Inter-Bold"
@@ -867,7 +868,8 @@ class Sales(ft.Container):
 
             return None
 
-    def ouvrir_et_imprimer_ticket(self, url_publique):
+    @staticmethod
+    def ouvrir_et_imprimer_ticket(url_publique):
         """Ouvre automatiquement le ticket via son URL Supabase dans le navigateur par défaut."""
         if not url_publique:
             return
