@@ -947,98 +947,208 @@ class Products(ft.Container):
 
         try:
             import openpyxl
+
             wb = openpyxl.load_workbook(filepath, data_only=True)
             sheet = wb.active
+
             success_count = 0
-                
-            for row in sheet.iter_rows(min_row=2, values_only=True):
-                # Sécurité : Si la ligne est vide ou si la désignation (colonne 1) est absente
-                if not row or row[0] is None:
-                    continue
+            error_count = 0
 
-                designation = str(row[0]).strip()
-                product_type = str(row[1]).strip() if row[1] else "Général"
-                price_buy = float(row[2]) if row[2] is not None else 0.0
-                price = float(row[3]) if row[3] is not None else 0.0
-                quantite_excel = int(row[4]) if row[4] is not None else 0
+            for row_number, row in enumerate(
+                    sheet.iter_rows(min_row=2, values_only=True),
+                    start=2
+            ):
+                try:
+                    # ============================================================
+                    # 1. IGNORER LES LIGNES VIDES
+                    # ============================================================
+                    if not row or row[0] is None:
+                        continue
 
-                # 1. Détermination de la répartition des stocks selon le choix de l'utilisateur
-                stock_principal = quantite_excel
-                stock_secondaire = 0
+                    # ============================================================
+                    # 2. LECTURE DES COLONNES EXCEL
+                    # ============================================================
+                    designation = str(row[0]).strip()
 
-                # 2. Préparation des deux configurations de base (sans l'id)
-                payload_destination_choisie = {
-                    "tenant_id": self.tenant_id,
-                    "designation": designation,
-                    "product_type": product_type,
-                    "price_buy": price_buy,
-                    "price": price,
-                    "stock": stock_principal,
-                    "image": DEFAULT_IMAGE
-                }
+                    if not designation:
+                        continue
 
-                payload_destination_secondaire = {
-                    "tenant_id": self.tenant_id,
-                    "designation": designation,
-                    "product_type": product_type,
-                    "price_buy": price_buy,
-                    "price": price,
-                    "stock": stock_secondaire,
-                    "image": DEFAULT_IMAGE
-                }
+                    product_type = (
+                        str(row[1]).strip()
+                        if len(row) > 1 and row[1] is not None
+                        else "Général"
+                    )
 
-                # 3. Routage dynamique des tables d'écriture
-                if self.selected_stock_destination == "products":
-                    table_1, payload_1 = "products", payload_destination_choisie
-                    table_2, payload_2 = "stock_tampons", payload_destination_secondaire
-                else:
-                    table_1, payload_1 = "stock_tampons", payload_destination_choisie
-                    table_2, payload_2 = "products", payload_destination_secondaire
+                    price_buy = (
+                        float(row[2])
+                        if len(row) > 2 and row[2] is not None
+                        else 0.0
+                    )
 
-                # 4. Premier INSERT : On laisse PostgreSQL générer l'id auto-incrémenté (serial)
-                res_1 = await supabase_request_async(
-                    access_token=self.access_token,
-                    tenant_id=self.tenant_id,
-                    table_name=table_1,
-                    method="POST",
-                    data=payload_1
-                )
+                    price = (
+                        float(row[3])
+                        if len(row) > 3 and row[3] is not None
+                        else 0.0
+                    )
 
-                # Extraction de l'ID généré par la première table
-                generated_id = None
-                if isinstance(res_1, list) and len(res_1) > 0:
-                    generated_id = res_1[0].get("id")
-                elif isinstance(res_1, dict):
-                    generated_id = res_1.get("id")
+                    stock_boutique = (
+                        int(row[4])
+                        if len(row) > 4 and row[4] is not None
+                        else 0
+                    )
 
-                if not generated_id:
-                    print(f"⚠️ Impossible de récupérer l'ID généré pour {designation}. Ligne ignorée.")
-                    continue
+                    stock_tampon = (
+                        int(row[5])
+                        if len(row) > 5 and row[5] is not None
+                        else 0
+                    )
 
-                # 5. Deuxième INSERT : On force l'id pour qu'il s'aligne exactement sur le premier
-                payload_2["id"] = int(generated_id)
+                    # ============================================================
+                    # 3. VALIDATION
+                    # ============================================================
+                    if stock_boutique < 0 or stock_tampon < 0:
+                        raise ValueError(
+                            "Les stocks ne peuvent pas être négatifs."
+                        )
 
-                await supabase_request_async(
-                    access_token=self.access_token,
-                    tenant_id=self.tenant_id,
-                    table_name=table_2,
-                    method="POST",
-                    data=payload_2
-                )
+                    # ============================================================
+                    # 4. INSERTION DU PRODUIT DANS PRODUCTS
+                    #    PRODUCTS = STOCK BOUTIQUE EN V1
+                    # ============================================================
+                    payload_product = {
+                        "tenant_id": self.tenant_id,
+                        "designation": designation,
+                        "product_type": product_type,
+                        "price_buy": price_buy,
+                        "price": price,
+                        "stock": stock_boutique,
+                        "image": DEFAULT_IMAGE
+                    }
 
-                success_count += 1
+                    res_product = await supabase_request_async(
+                        access_token=self.access_token,
+                        tenant_id=self.tenant_id,
+                        table_name="products",
+                        method="POST",
+                        data=payload_product
+                    )
 
-            # Rechargement des données sur l'interface graphique
+                    # ============================================================
+                    # 5. RÉCUPÉRATION DE L'ID GÉNÉRÉ
+                    # ============================================================
+                    generated_id = None
+
+                    if isinstance(res_product, list) and res_product:
+                        generated_id = res_product[0].get("id")
+
+                    elif isinstance(res_product, dict):
+                        generated_id = res_product.get("id")
+
+                    # Sécurité si Supabase ne renvoie pas l'ID
+                    if not generated_id:
+                        params_lookup = {
+                            "select": "id",
+                            "tenant_id": f"eq.{self.tenant_id}",
+                            "designation": f"eq.{designation}",
+                            "order": "id.desc",
+                            "limit": 1
+                        }
+
+                        lookup = await supabase_request_async(
+                            access_token=self.access_token,
+                            tenant_id=self.tenant_id,
+                            table_name="products",
+                            method="GET",
+                            params=params_lookup
+                        )
+
+                        if lookup:
+                            generated_id = lookup[0].get("id")
+
+                    if not generated_id:
+                        raise Exception(
+                            f"Impossible de récupérer l'ID du produit '{designation}'."
+                        )
+
+                    generated_id = int(generated_id)
+
+                    # ============================================================
+                    # 6. INSERTION DANS STOCK_TAMPONS
+                    #    AVEC EXACTEMENT LE MÊME ID
+                    # ============================================================
+                    payload_tampon = {
+                        "id": generated_id,
+                        "tenant_id": self.tenant_id,
+                        "designation": designation,
+                        "product_type": product_type,
+                        "price_buy": price_buy,
+                        "price": price,
+                        "stock": stock_tampon,
+                        "image": DEFAULT_IMAGE
+                    }
+
+                    await supabase_request_async(
+                        access_token=self.access_token,
+                        tenant_id=self.tenant_id,
+                        table_name="stock_tampons",
+                        method="POST",
+                        data=payload_tampon
+                    )
+
+                    # ============================================================
+                    # 7. PRODUIT IMPORTÉ AVEC SUCCÈS
+                    # ============================================================
+                    success_count += 1
+
+                except Exception as row_error:
+                    error_count += 1
+
+                    print(
+                        f"Erreur ligne Excel {row_number} "
+                        f"({designation if 'designation' in locals() else 'inconnue'}) : "
+                        f"{row_error}"
+                    )
+
+            # ================================================================
+            # 8. RECHARGEMENT DE L'INTERFACE
+            # ================================================================
             await self.load_products_data()
-            self.cp.show_alert(f"Importation réussie : {success_count} produits synchronisés !", ft.Icons.CHECK_CIRCLE,
-                               ft.Colors.GREEN)
+
+            # ================================================================
+            # 9. MESSAGE FINAL
+            # ================================================================
+            if error_count == 0:
+
+                self.cp.show_alert(
+                    f"Importation réussie : {success_count} produits créés "
+                    f"avec leurs stocks boutique et tampon.",
+                    ft.Icons.CHECK_CIRCLE,
+                    ft.Colors.GREEN
+                )
+
+            else:
+
+                self.cp.show_alert(
+                    f"Importation terminée : {success_count} réussis, "
+                    f"{error_count} erreur(s). Consultez la console.",
+                    ft.Icons.WARNING,
+                    ft.Colors.ORANGE
+                )
 
         except Exception as ex:
-            print(f"Erreur d'importation Excel : {ex}")
-            self.cp.show_alert("Fichier Excel invalide ou corrompu.", ft.Icons.ERROR, ft.Colors.RED)
 
-        self.cp.hide_container(self.cp.waiting_container)
-        self.cp.page.update()
+            print(f"Erreur générale d'importation Excel : {ex}")
+
+            self.cp.show_alert(
+                f"Erreur d'importation : {str(ex)}",
+                ft.Icons.ERROR,
+                ft.Colors.RED
+            )
+
+        finally:
+            self.cp.hide_container(self.cp.waiting_container)
+            self.cp.page.update()
+
 
     def generate_excel_template(self, e):
         """Initialise le sélecteur pour enregistrer le fichier modèle Excel structuré."""
@@ -1061,7 +1171,14 @@ class Products(ft.Container):
                 ws.title = "Modèle Import Produits"
 
                 # En-têtes attendus par ton script d'importation
-                headers = ["Désignation *", "Catégorie", "Prix d'achat", "Prix de vente *", "Quantité en stock"]
+                headers = [
+                    "Désignation *",
+                    "Catégorie",
+                    "Prix d'achat",
+                    "Prix de vente *",
+                    "Stock boutique",
+                    "Stock tampon"
+                ]
                 ws.append(headers)
 
                 # Stylisation rapide des en-têtes pour faire professionnel
@@ -1101,43 +1218,11 @@ class Products(ft.Container):
         )
 
     def open_import_destination_modal(self, e):
-        """Ouvre l'AlertDialog de choix d'application des stocks."""
-        def confirm_destination(destination_table):
-            self.selected_stock_destination = destination_table
-            self.import_dialog.open = False
-            self.cp.page.update()
-            # Déclenche l'explorateur de fichiers d'importation
-            self.excel_picker.pick_files(allowed_extensions=["xlsx"])
+        """Ouvre directement le sélecteur Excel pour l'import initial."""
 
-        self.import_dialog = ft.AlertDialog(
-            title=ft.Text("Destination de l'importation Excel", font_family="PEB", size=18),
-            content=ft.Text(
-                "Sélectionnez la table dans laquelle les quantités en stock de votre fichier Excel seront appliquées.\n\n"
-                "Note : Les références seront créées simultanément dans les deux tables, mais la table secondaire démarrera avec un stock à 0.",
-                size=14, font_family="PPM"
-            ),
-            actions=[
-                ft.Row([
-                    ft.ElevatedButton(
-                        "Stock Boutique",
-                        icon=ft.Icons.STORE_ROUNDED,
-                        style=ft.ButtonStyle(color="white", bgcolor="indigo"),
-                        on_click=lambda _: confirm_destination("products")
-                    ),
-                    ft.ElevatedButton(
-                        "Stock Tampon (Dépôt)",
-                        icon=ft.Icons.ALL_INBOX_ROUNDED,
-                        style=ft.ButtonStyle(color="white", bgcolor="teal"),
-                        on_click=lambda _: confirm_destination("stock_tampons")
-                    ),
-                ], alignment=ft.MainAxisAlignment.CENTER, spacing=15)
-            ],
-            actions_alignment=ft.MainAxisAlignment.CENTER
+        self.excel_picker.pick_files(
+            allowed_extensions=["xlsx"]
         )
-
-        self.cp.page.overlay.append(self.import_dialog)
-        self.import_dialog.open = True
-        self.cp.page.update()
 
     async def open_entree_tampon_window(self, e):
         """Ouvre la fenêtre de gestion des entrées / arrivages pour le stock tampon"""
