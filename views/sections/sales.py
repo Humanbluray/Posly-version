@@ -12,7 +12,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import requests
+import requests, tempfile
 
 
 class Sales(ft.Container):
@@ -675,7 +675,14 @@ class Sales(ft.Container):
         # Cela évite que le pilote de l'imprimante ne panique avec des tailles de pages exotiques.
         hauteur_ticket = 280 * mm
 
-        chemin_pdf = "ticket_temp.pdf"
+        import tempfile
+
+        nom_ticket = f"Ticket_{facture_id}_{self.tenant_id}.pdf"
+
+        chemin_pdf = os.path.join(
+            tempfile.gettempdir(),
+            nom_ticket
+        )
         c = canvas.Canvas(chemin_pdf, pagesize=(largeur_ticket, hauteur_ticket))
 
         # Définition de la CropBox pour guider le pilote d'impression
@@ -823,7 +830,42 @@ class Sales(ft.Container):
         c.save()
         y_cursor -= 15 * mm
 
-        return chemin_pdf
+        # ============================================================
+        # UPLOAD DU TICKET SUR SUPABASE STORAGE
+        # ============================================================
+        try:
+            from services.supabase_client import supabase_admin
+
+            with open(chemin_pdf, "rb") as f:
+                supabase_admin.storage.from_("tickets").upload(
+                    path=nom_ticket,
+                    file=f,
+                    file_options={
+                        "content-type": "application/pdf"
+                    }
+                )
+
+            url_publique = (
+                supabase_admin
+                .storage
+                .from_("tickets")
+                .get_public_url(nom_ticket)
+            )
+
+            print(
+                f"Ticket généré et envoyé sur Supabase : "
+                f"{url_publique}"
+            )
+
+            return str(url_publique)
+
+        except Exception as upload_error:
+            print(
+                f"Erreur lors de l'upload du ticket : "
+                f"{upload_error}"
+            )
+
+            return None
 
     def ouvrir_et_imprimer_ticket(self, url_publique):
         """Ouvre automatiquement le ticket via son URL Supabase dans le navigateur par défaut."""
