@@ -775,16 +775,17 @@ class Products(ft.Container):
 
         # 1. Remplissage des champs de texte... (le reste de ton code demeure identique)
         self.edit_designation_field.value = product_data.get("designation", "")
-        self.edit_price_field.value = str(product_data.get("price", 0))
+        self.edit_price_field.value = str(product_data.get("price_sell", 0))
         self.edit_price_buy_field.value = str(product_data.get("price_buy", 0))
         self.edit_type_field.value = product_data.get("product_type", "")
 
         # 2. RESTRICTIONS STRICTES : Passage en lecture seule et désactivation des prix et types
-        self.edit_price_field.read_only = True
+        self.edit_price_field.read_only = False
         self.edit_price_buy_field.read_only = True
         self.edit_type_field.read_only = True
+        self.edit_price_buy_field.visible = False
 
-        self.edit_price_field.disabled = True
+        self.edit_price_field.disabled = False
         self.edit_price_buy_field.disabled = True
         self.edit_type_field.disabled = True
 
@@ -874,65 +875,158 @@ class Products(ft.Container):
         self.cp.page.update()
 
     async def save_edit_product(self, e):
-        """Enregistre uniquement les modifications de la désignation et de l'image
-        si elle a été ajoutée avec retour visuel en cas d'erreur"""
+        """Enregistre les modifications de la désignation et du prix de vente."""
+
         if not self.selected_product_id:
-            self.cp.show_alert("Aucun produit sélectionné pour la modification.", ft.Icons.ERROR, ft.Colors.RED)
+            self.cp.show_alert(
+                "Aucun produit sélectionné pour la modification.",
+                ft.Icons.ERROR,
+                ft.Colors.RED
+            )
             return
 
-        designation_val = self.edit_designation_field.value.strip() if self.edit_designation_field.value else ""
+        # ============================================================
+        # 1. VALIDATION DE LA DÉSIGNATION
+        # ============================================================
+        designation_val = (
+            self.edit_designation_field.value.strip()
+            if self.edit_designation_field.value
+            else ""
+        )
+
         if not designation_val:
-            self.cp.show_alert("La désignation est obligatoire.", ft.Icons.WARNING, ft.Colors.ORANGE)
+            self.cp.show_alert(
+                "La désignation est obligatoire.",
+                ft.Icons.WARNING,
+                ft.Colors.ORANGE
+            )
+            return
+
+        # ============================================================
+        # 2. VALIDATION DU PRIX DE VENTE
+        # ============================================================
+        price_value = (
+            self.edit_price_field.value.strip()
+            if self.edit_price_field.value
+            else ""
+        )
+
+        if not price_value:
+            self.cp.show_alert(
+                "Le prix de vente est obligatoire.",
+                ft.Icons.WARNING,
+                ft.Colors.ORANGE
+            )
+            return
+
+        try:
+            # Accepter éventuellement 1500,50 ou 1500.50
+            price_value = price_value.replace(",", ".")
+            price_val = float(price_value)
+
+            if price_val < 0:
+                self.cp.show_alert(
+                    "Le prix de vente ne peut pas être négatif.",
+                    ft.Icons.WARNING,
+                    ft.Colors.ORANGE
+                )
+                return
+
+        except ValueError:
+            self.cp.show_alert(
+                "Le prix de vente doit être un nombre valide.",
+                ft.Icons.WARNING,
+                ft.Colors.ORANGE
+            )
             return
 
         self.loader.visible = True
         self.cp.page.update()
 
         try:
-            # Sécurité maximale : On ne construit le payload QU'AVEC la désignation au départ
+
+            # ========================================================
+            # 3. PAYLOAD DE MODIFICATION
+            # ========================================================
             update_payload = {
-                "designation": designation_val
+                "designation": designation_val,
+                "price": price_val
             }
 
-            # Si une nouvelle image a été choisie (lorsque le bouton était visible)
-            if hasattr(self, 'selected_image_path') and self.selected_image_path:
-                print(f"[DEBUG] Début du téléversement de l'image : {self.selected_image_path}")
+            # ========================================================
+            # 4. IMAGE
+            # ========================================================
+            if hasattr(self, "selected_image_path") and self.selected_image_path:
 
-                # --- CORRECTION ICI : Passage du chemin complet de l'image en paramètre ---
-                url_image = await self.upload_image_to_bucket(self.selected_image_path)
+                print(
+                    f"[DEBUG] Début du téléversement de l'image : "
+                    f"{self.selected_image_path}"
+                )
+
+                url_image = await self.upload_image_to_bucket(
+                    self.selected_image_path
+                )
 
                 if url_image:
                     update_payload["image"] = url_image
-                    print(f"[DEBUG] URL d'image récupérée avec succès : {url_image}")
+
                 else:
-                    print("[DEBUG] Échec du téléversement de l'image, l'URL est vide.")
-                    self.cp.show_alert("L'image n'a pas pu être envoyée sur le serveur.", ft.Icons.WARNING,
-                                       ft.Colors.ORANGE)
+                    print(
+                        "[DEBUG] Échec du téléversement de l'image."
+                    )
 
+                    self.cp.show_alert(
+                        "L'image n'a pas pu être envoyée sur le serveur.",
+                        ft.Icons.WARNING,
+                        ft.Colors.ORANGE
+                    )
+
+            # ========================================================
+            # 5. PATCH PRODUCTS
+            # ========================================================
             print(
-                f"[DEBUG] Envoi du PATCH à Supabase pour l'ID {self.selected_product_id} avec le payload : {update_payload}")
+                f"[DEBUG] Mise à jour du produit "
+                f"{self.selected_product_id} : {update_payload}"
+            )
 
-            # Mise à jour partielle (PATCH) sur Supabase
             await supabase_request_async(
                 access_token=self.access_token,
                 tenant_id=self.tenant_id,
                 table_name="products",
                 method="PATCH",
-                params={"id": f"eq.{int(self.selected_product_id)}"},
+                params={
+                    "id": f"eq.{int(self.selected_product_id)}"
+                },
                 data=update_payload
             )
 
-            print("[DEBUG] Mise à jour Supabase réussie. Rechargement des données...")
-
-            # Fermeture du panneau et rafraîchissement complet
+            # ========================================================
+            # 6. FERMETURE + RECHARGEMENT
+            # ========================================================
             self.cp.hide_container(self.cp.st_container)
+            self.cp.page.update()
             await self.load_products_data()
-            self.cp.show_alert("Produit mis à jour avec succès !", ft.Icons.CHECK_CIRCLE, ft.Colors.GREEN)
+
+            self.cp.show_alert(
+                "Produit mis à jour avec succès !",
+                ft.Icons.CHECK_CIRCLE,
+                ft.Colors.GREEN
+            )
 
         except Exception as ex:
-            print(f"[ERREUR CRITIQUE] save_edit_product : {ex}")
-            self.cp.show_alert(f"Erreur lors de la mise à jour : {str(ex)}", ft.Icons.ERROR, ft.Colors.RED)
+
+            print(
+                f"[ERREUR CRITIQUE] save_edit_product : {ex}"
+            )
+
+            self.cp.show_alert(
+                f"Erreur lors de la mise à jour : {str(ex)}",
+                ft.Icons.ERROR,
+                ft.Colors.RED
+            )
+
         finally:
+
             self.loader.visible = False
             self.cp.page.update()
 
