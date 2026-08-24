@@ -591,7 +591,7 @@ class Sales(ft.Container):
             )
 
             if url_ticket:
-                self.ouvrir_et_imprimer_ticket(url_ticket)
+                await self.ouvrir_et_imprimer_ticket(url_ticket)
 
             # 6. Réinitialisation complète de l'interface utilisateur (Reset UI)
             self.basket.controls.clear()
@@ -868,17 +868,23 @@ class Sales(ft.Container):
 
             return None
 
-    @staticmethod
-    def ouvrir_et_imprimer_ticket(url_publique):
-        """Ouvre automatiquement le ticket via son URL Supabase dans le navigateur par défaut."""
+    async def ouvrir_et_imprimer_ticket(self, url_publique):
+        """Ouvre le ticket dans le navigateur du client."""
+
         if not url_publique:
             return
 
         try:
-            # Ouvre l'URL directement dans le navigateur internet de la machine
-            webbrowser.open(url_publique)
-            print(f"Ouverture du ticket dans le navigateur : {url_publique}")
+            await self.cp.page.launch_url(url_publique)
+
+            print(
+                f"Ouverture du ticket dans le navigateur client : "
+                f"{url_publique}"
+            )
+
         except Exception as err:
-            print(f"Erreur lors de l'ouverture de l'URL du ticket : {str(err)}")
+            print(
+                f"Erreur lors de l'ouverture du ticket : {err}"
+            )
 
 
