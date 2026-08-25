@@ -591,7 +591,7 @@ class Sales(ft.Container):
             )
 
             if url_ticket:
-                await self.ouvrir_et_imprimer_ticket(url_ticket)
+                self.ouvrir_et_imprimer_ticket(url_ticket)
 
             # 6. Réinitialisation complète de l'interface utilisateur (Reset UI)
             self.basket.controls.clear()
@@ -868,14 +868,14 @@ class Sales(ft.Container):
 
             return None
 
-    async def ouvrir_et_imprimer_ticket(self, url_publique):
+    def ouvrir_et_imprimer_ticket(self, url_publique):
         """Ouvre le ticket dans le navigateur du client."""
 
         if not url_publique:
             return
 
         try:
-            await self.cp.page.launch_url(url_publique)
+            self.cp.page.launch_url(url_publique)
 
             print(
                 f"Ouverture du ticket dans le navigateur client : "
