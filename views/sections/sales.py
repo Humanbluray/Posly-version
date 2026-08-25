@@ -590,10 +590,10 @@ class Sales(ft.Container):
                 tenant_infos=tenant_infos
             )
 
-            if url_ticket:
-                self.ouvrir_et_imprimer_ticket(url_ticket)
+            # ============================================================
+            # 6. RÉINITIALISATION IMMÉDIATE DE L'INTERFACE
+            # ============================================================
 
-            # 6. Réinitialisation complète de l'interface utilisateur (Reset UI)
             self.basket.controls.clear()
             self.cp.hide_container(self.cp.valid_basket_container)
             self.basket_copy.controls.clear()
@@ -601,15 +601,24 @@ class Sales(ft.Container):
             self.search_field.value = ""
             self.due.value = "0"
             self.amount.value = "0"
-            self.espece.value = '0'
+            self.espece.value = "0"
             self.switch_table.value = False
             self.table_number.disabled = True
-
             self.cp.show_alert(
                 "Achat validé & Ticket imprimé", ft.Icons.CHECK_CIRCLE, ft.Colors.LIGHT_GREEN_400
             )
 
             self.run_async_in_thread(self.load_datas())
+            self.cp.page.update()
+
+            # ============================================================
+            # 7. OUVERTURE DU TICKET APRÈS LE RESET DE L'UI
+            # ============================================================
+
+            if url_ticket:
+                self.ouvrir_et_imprimer_ticket(url_ticket)
+
+
 
         except Exception as err:
             print(f"Erreur fatale lors de la validation : {err}")
