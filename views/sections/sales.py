@@ -687,7 +687,8 @@ class Sales(ft.Container):
 
         import tempfile
 
-        nom_ticket = f"Ticket_{facture_id}_{self.tenant_id}.pdf"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        nom_ticket = f"Ticket_{facture_id}_{self.tenant_id}_{timestamp}.pdf"
 
         chemin_pdf = os.path.join(
             tempfile.gettempdir(),
