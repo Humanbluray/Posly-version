@@ -261,56 +261,50 @@ class Reports(ft.Container):
         self.current_stock_datas = []  # Stockage local pour l'export PDF
 
         self.main_layout = ft.Container(
-            **stat_style,
+            **stat_style, expand=True,
             content=ft.Column(
                 expand=True,
                 controls=[
-                    # ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-                    ft.Column(
+                    ft.Container(
                         expand=True,
-                        controls=[
-                            ft.Container(
-                                expand=True,
-                                padding=20, content=ft.Column(
-                                    expand=True,
+                        padding=20, content=ft.Column(
+                            expand=True,
+                            controls=[
+                                ft.Row(
                                     controls=[
+                                        ft.Text("Rapports journaliers", size=16, font_family="PEB"),
                                         ft.Row(
-                                            controls=[
-                                                ft.Text("Rapports journaliers", size=16, font_family="PEB"),
-                                                ft.Row(
-                                                    controls=[self.cloture_button, self.stock_journalier_button]
-                                                )
-                                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                                            controls=[self.cloture_button, self.stock_journalier_button]
+                                        )
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                                ),
+                                ft.Row(
+                                    controls=[
+                                        self.base_search, self.day, self.month, self.year,
+                                        ft.Container(
+                                            border_radius=6, padding=8, alignment=ft.alignment.center, border=ft.border.all(1, "grey"),
+                                            bgcolor=BG_COLOR,
+                                            content=ft.Image(
+                                                src=resource_path("assets/icons/grey/funnel.svg"), width=16, height=18
+                                            ),
+                                            on_click=self.filter_history
                                         ),
-                                        ft.Row(
-                                            controls=[
-                                                self.base_search, self.day, self.month, self.year,
-                                                ft.Container(
-                                                    border_radius=6, padding=8, alignment=ft.alignment.center, border=ft.border.all(1, "grey"),
-                                                    bgcolor=BG_COLOR,
-                                                    content=ft.Image(
-                                                        src=resource_path("assets/icons/grey/funnel.svg"), width=16, height=18
-                                                    ),
-                                                    on_click=self.filter_history
-                                                ),
-                                                ft.Container(
-                                                    border_radius=6, padding=8, alignment=ft.alignment.center,
-                                                    border=ft.border.all(1, "grey"),
-                                                    bgcolor=BG_COLOR,
-                                                    content=ft.Image(
-                                                        src=resource_path("assets/icons/grey/funnel-x.svg"), width=16, height=18
-                                                    ),
-                                                    on_click=lambda e: self.run_async_in_thread(self.load_datas())
-                                                ),
-                                            ]
+                                        ft.Container(
+                                            border_radius=6, padding=8, alignment=ft.alignment.center,
+                                            border=ft.border.all(1, "grey"),
+                                            bgcolor=BG_COLOR,
+                                            content=ft.Image(
+                                                src=resource_path("assets/icons/grey/funnel-x.svg"), width=16, height=18
+                                            ),
+                                            on_click=lambda e: self.run_async_in_thread(self.load_datas())
                                         ),
-                                        ft.Divider(height=2, color=ft.Colors.TRANSPARENT),
-                                        ft.ListView(expand=True, controls=[self.table]),
                                     ]
-                                )
-                            ),
-                        ]
-                    )
+                                ),
+                                ft.Divider(height=2, color=ft.Colors.TRANSPARENT),
+                                ft.ListView(expand=True, controls=[self.table]),
+                            ]
+                        )
+                    ),
                 ]
             )
         )
@@ -331,6 +325,7 @@ class Reports(ft.Container):
         )
         
         self.details_vente_form = ft.Column(
+            expand=True, scroll=ft.ScrollMode.AUTO,
             controls=[
                 ft.Container(
                     padding=20, bgcolor="white",
@@ -399,7 +394,7 @@ class Reports(ft.Container):
                         ]
                     )
                 )
-            ], spacing=0, expand=True
+            ], spacing=0,
         )
         self.progress_container = ft.Container(
             expand=True, alignment=ft.alignment.center, bgcolor="white",
@@ -410,6 +405,7 @@ class Reports(ft.Container):
             expand=True, alignment=ft.alignment.center,
             controls=[
                 ft.Column(
+                    expand=True,
                     controls=[
                         ft.Row(
                             controls=[
@@ -495,7 +491,6 @@ class Reports(ft.Container):
         """Charge les catégories de produits"""
         params = {
             'select': "*",
-            'order': 'creation_date.desc'
         }
 
         ventes = await supabase_request_async(
@@ -508,9 +503,9 @@ class Reports(ft.Container):
         
         self.table_des_ventes = ventes
 
-        # print("DEBUG")
-        # print(len(ventes), type(ventes))
-        # print(ventes[0])
+        print("DEBUG")
+        print(len(ventes), type(ventes))
+        print(ventes[0])
 
         self.progress_container.visible = False
         # 3. Chargement par lots
